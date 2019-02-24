@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="examples/src"/>
+	<classpathentry kind="src" path="integration/boofcv-swing/src"/>
+	<classpathentry kind="src" path="main/autocode/src"/>
+	<classpathentry kind="src" path="main/boofcv-calibration/src"/>
+	<classpathentry kind="src" path="main/boofcv-feature/experimental/src"/>
+	<classpathentry kind="src" path="main/boofcv-feature/src"/>
+	<classpathentry kind="src" path="main/boofcv-geo/src"/>
+	<classpathentry kind="src" path="main/boofcv-io/src"/>
+	<classpathentry kind="src" path="main/boofcv-ip/src"/>
+	<classpathentry kind="src" path="main/boofcv-learning/src"/>
+	<classpathentry kind="src" path="main/boofcv-recognition/src"/>
+	<classpathentry kind="src" path="main/boofcv-sfm/src"/>
+	<classpathentry kind="lib" path="gradle/wrapper/gradle-wrapper.jar"/>
+	<classpathentry kind="output" path="examples/out/production/classes"/>
+</classpath>

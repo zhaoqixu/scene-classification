@@ -1,0 +1,3 @@
+- Improve recognition of small targets by using polygon image integrator
+- Compute how frequently a pixel is white or black.  use that to weigh results when computing scores
+   * If a target is mostly black then black is more important

@@ -1,0 +1,324 @@
+ext.libpath = file('./').absolutePath
+
+allprojects {
+    apply plugin: 'idea'
+    apply plugin: 'eclipse'
+
+    group = 'org.boofcv'
+    version = '0.27'
+}
+
+project.ext.set("deepboof_version", '0.4')
+
+// Which native platforms are supported can be specified in the command line.  Otherwise
+// the default is to support all of them
+if( project.hasProperty("native_arch")) {
+    project.ext.native_arch = [project.native_arch]
+} else {
+    project.ext.native_arch = [ "linux-x86_64", "macosx-x86_64", "windows-x86_64"]
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'osgi'
+    apply plugin: 'maven'
+    apply plugin: 'signing'
+
+    sourceCompatibility = 1.7
+    targetCompatibility = 1.7
+
+    // Fail on jar conflict
+    configurations.all {
+        resolutionStrategy {
+            failOnVersionConflict()
+        }
+    }
+
+    // Enable incremental compile. Should make single file changes faster
+    tasks.withType(JavaCompile) {
+        options.incremental = true
+    }
+
+    repositories {
+        mavenCentral()
+        mavenLocal()
+
+        maven {
+            url = "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+    }
+
+    test {
+        ignoreFailures true
+        reports.html.enabled = false
+    }
+
+    sourceSets {
+        main {
+            java {
+                srcDir 'src'
+            }
+            resources {
+                srcDir 'resources/src'
+            }
+        }
+
+        test {
+            java {
+                srcDir 'test'
+                srcDir 'generate'
+                srcDir 'benchmark'
+                srcDir 'experimental/src'
+                srcDir 'experimental/test'
+            }
+            resources {
+                srcDir 'resources/test'
+            }
+        }
+    }
+
+    dependencies {
+        compile group: 'org.georegression', name: 'georegression', version: '0.13'
+
+        testCompile group: 'junit', name: 'junit', version: '4.12'
+    }
+
+    jar {
+        manifest { // the manifest of the default jar is of type OsgiManifest
+            instruction 'Bundle-Vendor', 'BoofCV'
+//            instruction 'Bundle-Description', 'BoofCV'
+            instruction 'Bundle-DocURL', 'http://boofcv.org'
+        }
+    }
+
+    task javadocJar(type: Jar) {
+        classifier = 'javadoc'
+        from javadoc
+    }
+
+    task sourcesJar(type: Jar) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    artifacts {
+        archives sourcesJar
+//        archives javadocJar
+    }
+
+    // Force the release build to fail if it depends on a SNAPSHOT
+    task checkDependsOnSNAPSHOT {
+        doLast {
+            if (version.endsWith("SNAPSHOT"))
+                return
+
+            project.configurations.compile.each {
+                if (it.toString().contains("SNAPSHOT"))
+                    throw new Exception("Release build contains snapshot dependencies: " + it)
+            }
+        }
+    }
+    jar.dependsOn checkDependsOnSNAPSHOT
+
+    // if Maven central isn't setup in gradle.properties skip all of this
+    if( project.hasProperty('ossrhUsername') ) {
+        signing {
+            sign configurations.archives
+        }
+
+        uploadArchives {
+            repositories {
+                mavenDeployer {
+                    beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+                    repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                        authentication(userName: ossrhUsername, password: ossrhPassword)
+                    }
+
+                    snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                        authentication(userName: ossrhUsername, password: ossrhPassword)
+                    }
+
+                    pom.project {
+                        name 'BoofCV'
+                        packaging 'pom'
+                        // optionally artifactId can be defined here
+                        description 'BoofCV is an open source Java library for real-time computer vision and robotics applications.'
+                        url 'http://boofcv.org'
+
+                        scm {
+                            connection 'scm:git:git://github.com/lessthanoptimal/BoofCV.git'
+                            developerConnection 'scm:git:git://github.com/lessthanoptimal/BoofCV.git'
+                            url 'https://github.com/lessthanoptimal/BoofCV'
+                        }
+
+                        licenses {
+                            license {
+                                name 'The Apache Software License, Version 2.0'
+                                url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                            }
+                        }
+
+                        developers {
+                            developer {
+                                id 'pabeles'
+                                name 'Peter Abeles'
+                                email 'peter.abeles@gmail.com'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// list of projects for creating javadoc and jars
+def mainProjects = [
+        ':main:boofcv-ip',
+        ':main:boofcv-io',
+        ':main:boofcv-feature',
+        ':main:boofcv-geo',
+        ':main:boofcv-calibration',
+        ':main:boofcv-sfm',
+        ':main:boofcv-recognition',
+        ':main:boofcv-learning',
+        ':integration:boofcv-swing'
+]
+
+//def integrationProjects = [
+//        ':integration:boofcv-jcodec',
+//        ':integration:boofcv-WebcamCapture',
+//        ':integration:boofcv-javacv',
+//        ':integration:boofcv-ffmpeg',
+//]
+
+//try {
+//    project(':integration:boofcv-javafx')
+//    integrationProjects.add(':integration:boofcv-javafx')
+//} catch( UnknownProjectException ignore ) {}
+//
+//try {
+//    project(':integration:boofcv-android')
+//    integrationProjects.add(':integration:boofcv-android')
+//} catch( UnknownProjectException ignore ) {}
+//try {
+//    project(':integration:boofcv-openkinect')
+//    integrationProjects.add(':integration:boofcv-openkinect')
+//} catch( UnknownProjectException ignore ) {}
+
+def javadocProjects = mainProjects // + integrationProjects
+
+// Creates a directory with all the compiled BoofCV jars and the dependencies for main
+task createLibraryDirectory( dependsOn: javadocProjects.collect {[ it+':jar',it+':sourcesJar']}.flatten() ) {
+
+    doLast {
+        // Compiled jars (bin and src) for all BoofCV modules
+        ext.boofJars = files(javadocProjects.collect { project(it).tasks.jar.archivePath })
+        ext.boofJars += files(javadocProjects.collect { project(it).tasks.sourcesJar.archivePath })
+
+        // This will be a list of just external dependencies
+        ext.listExternal = files(javadocProjects.collect { project(it).configurations.compile })
+        ext.listExternal = ext.listExternal - ext.boofJars
+        ext.listExternal = ext.listExternal.findAll({ !it.getName().contains("android.jar") })
+
+        ext.fileName = "boofcv-v"+version+"-libs"
+        file(ext.fileName).deleteDir()
+        file(ext.fileName).mkdir()
+
+        copy {
+            from ext.listExternal
+            into ext.fileName
+        }
+
+        copy {
+            from ext.boofJars
+            into ext.fileName
+
+        }
+
+        println("\n\nSaved to directory "+ext.fileName)
+    }
+}
+
+// Creates a single jar which contains all the subprojects in main and integration
+task oneJarBin(type: Jar, dependsOn: javadocProjects.collect { it + ":compileJava" }) {
+    baseName = 'BoofCV'
+
+    from files(javadocProjects.collect { project(it).sourceSets.main.output })
+}
+
+task alljavadoc(type: Javadoc) {
+    // only include source code in src directory to avoid including 3rd party code which some projects do as a hack
+    source = javadocProjects.collect { project(it).fileTree('src').include('**/*.java') }
+//    source = javadocProjects.collect { project(it).sourceSets.main.allJava }
+    classpath = files(javadocProjects.collect { project(it).sourceSets.main.compileClasspath })
+
+    destinationDir = file("docs/api")
+
+    configure(options) {
+        failOnError = false
+        docTitle = "BoofCV JavaDoc ($project.version)"
+        links = [ 'http://docs.oracle.com/javase/7/docs/api/',
+                  'http://ejml.org/javadoc/',
+                  'http://georegression.org/javadoc/',
+                  'http://ddogleg.org/javadoc/']
+    }
+}
+
+task alljavadocWeb(type: Javadoc) {
+    // only include source code in src directory to avoid including 3rd party code which some projects do as a hack
+    source = javadocProjects.collect { project(it).fileTree('src').include('**/*.java') }
+//    source = javadocProjects.collect { project(it).sourceSets.main.allJava }
+    classpath = files(javadocProjects.collect { project(it).sourceSets.main.compileClasspath })
+
+    destinationDir = file("docs/api-web")
+
+    // Hack for Java 8u121 and beyond. Comment out if running an earlier version of Java
+    options.addBooleanOption("-allow-script-in-comments", true)
+    configure(options) {
+        failOnError = false
+        docTitle = "BoofCV JavaDoc ($project.version)"
+        links = [ 'http://docs.oracle.com/javase/7/docs/api/',
+                  'http://ejml.org/javadoc/',
+                  'http://georegression.org/javadoc/',
+                  'http://ddogleg.org/javadoc/']
+        // bottom = file('misc/bottom.txt').text
+    }
+}
+
+task testReport(type: TestReport) {
+    destinationDir = file("$buildDir/reports/allTests")
+    reportOn subprojects*.test
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.0.1'
+}
+
+idea {
+    project {
+        jdkName = '1.7 (64bit)'
+        languageLevel = '1.7'
+    }
+
+    module {
+        excludeDirs += file('.idea')
+    }
+}
+
+// Disable the creation of jars for distribution.  If you don't do this it will crash
+[':main',':examples',':main:autocode',':integration'].each {String a ->
+    project(a) {
+        if( project.hasProperty('ossrhUsername') ) {
+            signArchives.enabled = false
+        }
+        sourcesJar.enabled = false
+        javadocJar.enabled = false
+        jar.enabled = false
+        uploadArchives.enabled = false
+        install.enabled = false
+    }
+}
+
+
